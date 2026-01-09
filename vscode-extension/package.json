@@ -1,0 +1,85 @@
+{
+  "name": "copilot-rag-extension",
+  "displayName": "Copilot RAG Extension",
+  "description": "An extension to provide Copilot Chat with a fortune-500 level RAG of your source code.",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.88.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onChatParticipant:copilot-rag"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "chatParticipants": [
+      {
+        "id": "copilot-rag",
+        "name": "Copilot RAG",
+        "description": "Chat with your codebase.",
+        "isDefault": false,
+        "lastMessageFill": "Copilot RAG can answer questions about your workspace. Use @copilot-rag to get started."
+      }
+    ],
+    "commands": [
+      {
+        "command": "copilot-rag.startBackend",
+        "title": "Copilot RAG: Start Backend"
+      },
+      {
+        "command": "copilot-rag.stopBackend",
+        "title": "Copilot RAG: Stop Backend"
+      },
+      {
+        "command": "copilot-rag.ingestWorkspace",
+        "title": "Copilot RAG: Ingest Workspace"
+      }
+    ],
+    "configuration": {
+      "title": "Copilot RAG",
+      "properties": {
+        "copilot-rag.dockerComposePath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the directory containing the docker-compose files."
+        },
+        "copilot-rag.ragServerUrl": {
+          "type": "string",
+          "default": "http://localhost:8081/v1",
+          "description": "URL of the RAG server."
+        },
+        "copilot-rag.ingestionServerUrl": {
+          "type": "string",
+          "default": "http://localhost:8082/v1",
+          "description": "URL of the ingestion server."
+        },
+        "copilot-rag.vdbEndpoint": {
+          "type": "string",
+          "default": "http://localhost:19530",
+          "description": "URL of the vector database endpoint."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/node": "18.x",
+    "@types/vscode": "^1.88.0",
+    "@typescript-eslint/eslint-plugin": "^7.11.0",
+    "@typescript-eslint/parser": "^7.11.0",
+    "eslint": "^8.57.0",
+    "typescript": "^5.4.5"
+  },
+  "dependencies": {
+    "axios": "^1.7.2",
+    "form-data": "^4.0.5"
+  }
+}
