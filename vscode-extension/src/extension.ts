@@ -1,11 +1,19 @@
 import * as vscode from 'vscode';
 import axios from 'axios';
-import * as cp from 'child_process';
-import * as path from 'path';
-import FormData from 'form-data';
+import { BackendManager, BackendStatus } from './BackendManager';
+import { IngestionManager } from './IngestionManager';
 
 export function activate(context: vscode.ExtensionContext) {
-    const handler: vscode.ChatParticipant['handler'] = async (request, context, stream, token) => {
+    const backendManager = new BackendManager();
+    const ingestionManager = new IngestionManager();
+    context.subscriptions.push(backendManager, ingestionManager);
+
+    const handler: vscode.ChatParticipant['handler'] = async (request, _context, stream, token) => {
+        if (backendManager.getStatus() !== BackendStatus.Running) {
+            stream.markdown('The RAG backend is not running. Please start it first.');
+            return { metadata: { command: '' } };
+        }
+
         const config = vscode.workspace.getConfiguration('copilot-rag');
         const ragServerUrl = config.get<string>('ragServerUrl');
 
@@ -16,21 +24,72 @@ export function activate(context: vscode.ExtensionContext) {
 
         const prompt = request.prompt;
 
+        stream.progress('Thinking...');
         try {
             const response = await axios.post(`${ragServerUrl}/generate`, {
                 messages: [{ role: 'user', content: prompt }],
-                use_knowledge_base: true
+                use_knowledge_base: true,
+                enable_citations: true
             }, {
-                responseType: 'stream'
+                responseType: 'stream',
+                timeout: 60000, // 60 seconds timeout
+                cancelToken: new axios.CancelToken(source => {
+                    token.onCancellationRequested(() => {
+                        source.cancel('Request canceled by user in VS Code.');
+                    });
+                })
             });
 
+            let fullResponse = '';
+            let citations: any[] = [];
+            let firstChunk = true;
+
+            const streamParser = (chunk: Buffer) => {
+                const chunkStr = chunk.toString();
+                const lines = chunkStr.split('\n\n');
+                for (const line of lines) {
+                    if (line.startsWith('data: ')) {
+                        const data = line.substring(6);
+                        if (data.trim() === '[DONE]') {
+                            return;
+                        }
+                        try {
+                            const parsed = JSON.parse(data);
+                            if (firstChunk && parsed.citations) {
+                                citations = parsed.citations.results;
+                                firstChunk = false;
+                            }
+                            if (parsed.choices && parsed.choices[0].delta.content) {
+                                fullResponse += parsed.choices[0].delta.content;
+                            }
+                        } catch (e) {
+                            console.error('Error parsing stream chunk:', e);
+                        }
+                    }
+                }
+            };
+
             for await (const chunk of response.data) {
-                stream.markdown(chunk.toString());
+                streamParser(chunk);
+                let citationText = '';
+                if (citations.length > 0) {
+                    citationText = '\n\n**Sources:**\n';
+                    citations.forEach((citation: any, index: number) => {
+                        citationText += `${index + 1}. ${citation.document_name}\n`;
+                    });
+                }
+                stream.markdown(fullResponse + citationText);
             }
 
         } catch (error) {
             console.error(error);
-            stream.markdown('Error fetching response from RAG server.');
+            if (axios.isAxiosError(error)) {
+                stream.markdown(`Error fetching response from RAG server: ${error.message}. Is the backend running?`);
+            } else {
+                stream.markdown('An unknown error occurred while fetching the response.');
+            }
+        } finally {
+            stream.progress(undefined);
         }
 
         return { metadata: { command: '' } };
@@ -41,110 +100,21 @@ export function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(
         ragParticipant,
-        vscode.commands.registerCommand('copilot-rag.startBackend', () => {
-            const config = vscode.workspace.getConfiguration('copilot-rag');
-            const dockerComposePath = config.get<string>('dockerComposePath');
-
-            if (!dockerComposePath) {
-                vscode.window.showErrorMessage('Docker Compose path is not configured. Please set it in the settings.');
-                return;
-            }
-
-            const command = `docker-compose -f docker-compose-rag-server.yaml -f docker-compose-ingestor-server.yaml up -d`;
-            cp.exec(command, { cwd: dockerComposePath }, (err, stdout, stderr) => {
-                if (err) {
-                    vscode.window.showErrorMessage(`Error starting backend: ${stderr}`);
-                    return;
-                }
-                vscode.window.showInformationMessage('RAG backend started successfully.');
+        vscode.commands.registerCommand('copilot-rag.startBackend', () => backendManager.startBackend()),
+        vscode.commands.registerCommand('copilot-rag.stopBackend', () => backendManager.stopBackend()),
+        vscode.commands.registerCommand('copilot-rag.manageBackend', async () => {
+            const choice = await vscode.window.showQuickPick([
+                { label: 'Start Backend', description: 'Start the RAG backend services.', target: backendManager.startBackend },
+                { label: 'Stop Backend', description: 'Stop the RAG backend services.', target: backendManager.stopBackend }
+            ], {
+                placeHolder: 'Select an action to perform'
             });
+
+            if (choice) {
+                choice.target.call(backendManager);
+            }
         }),
-        vscode.commands.registerCommand('copilot-rag.stopBackend', () => {
-            const config = vscode.workspace.getConfiguration('copilot-rag');
-            const dockerComposePath = config.get<string>('dockerComposePath');
-
-            if (!dockerComposePath) {
-                vscode.window.showErrorMessage('Docker Compose path is not configured. Please set it in the settings.');
-                return;
-            }
-
-            const command = `docker-compose -f docker-compose-rag-server.yaml -f docker-compose-ingestor-server.yaml down`;
-            cp.exec(command, { cwd: dockerComposePath }, (err, stdout, stderr) => {
-                if (err) {
-                    vscode.window.showErrorMessage(`Error stopping backend: ${stderr}`);
-                    return;
-                }
-                vscode.window.showInformationMessage('RAG backend stopped successfully.');
-            });
-        }),
-        vscode.commands.registerCommand('copilot-rag.ingestWorkspace', async () => {
-            const config = vscode.workspace.getConfiguration('copilot-rag');
-            const ingestionServerUrl = config.get<string>('ingestionServerUrl');
-            const vdbEndpoint = config.get<string>('vdbEndpoint');
-
-            if (!ingestionServerUrl || !vdbEndpoint) {
-                vscode.window.showErrorMessage('Ingestion server URL or VDB endpoint is not configured. Please set them in the settings.');
-                return;
-            }
-
-            await vscode.window.withProgress({
-                location: vscode.ProgressLocation.Notification,
-                title: "Ingesting workspace...",
-                cancellable: false
-            }, async (progress) => {
-                progress.report({ increment: 0, message: "Finding files..." });
-
-                const files = await vscode.workspace.findFiles('**/*', '{**/node_modules/**,**/.git/**,**/.vscode/**,**/dist/**,**/build/**}');
-
-                progress.report({ increment: 10, message: `Found ${files.length} files. Starting upload...` });
-
-                const BATCH_SIZE = 50;
-                const totalBatches = Math.ceil(files.length / BATCH_SIZE);
-
-                try {
-                    for (let i = 0; i < files.length; i += BATCH_SIZE) {
-                        const batch = files.slice(i, i + BATCH_SIZE);
-                        const currentBatchNum = (i / BATCH_SIZE) + 1;
-
-                        progress.report({
-                            increment: (1 / totalBatches) * 80,
-                            message: `Uploading batch ${currentBatchNum} of ${totalBatches}...`
-                        });
-
-                        const formData = new FormData();
-                        const jsonPart = {
-                            "vdb_endpoint": vdbEndpoint,
-                            "collection_name": "multimodal_data",
-                            "blocking": true,
-                            "split_options": {
-                                "chunk_size": 512,
-                                "chunk_overlap": 150
-                            },
-                            "custom_metadata": [],
-                            "generate_summary": false
-                        };
-                        formData.append('data', JSON.stringify(jsonPart), { contentType: 'application/json' });
-
-                        for (const file of batch) {
-                            const fileContents = await vscode.workspace.fs.readFile(file);
-                            formData.append('documents', fileContents, path.basename(file.fsPath));
-                        }
-
-                        await axios.post(`${ingestionServerUrl}/documents`, formData, {
-                            headers: formData.getHeaders()
-                        });
-                    }
-                    vscode.window.showInformationMessage('Workspace ingested successfully.');
-                } catch (error) {
-                    if (axios.isAxiosError(error)) {
-                        vscode.window.showErrorMessage(`Error ingesting workspace: ${error.message}`);
-                        console.error(error.response?.data);
-                    } else {
-                        vscode.window.showErrorMessage(`An unknown error occurred during ingestion: ${error}`);
-                    }
-                }
-            });
-        })
+        vscode.commands.registerCommand('copilot-rag.ingestWorkspace', () => ingestionManager.ingestWorkspace())
     );
 }
 

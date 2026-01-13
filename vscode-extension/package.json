@@ -59,6 +59,22 @@
           "type": "string",
           "default": "http://localhost:19530",
           "description": "URL of the vector database endpoint."
+        },
+        "copilot-rag.llmProvider": {
+          "type": "string",
+          "default": "NVIDIA NIM",
+          "description": "The LLM provider to use for the RAG backend.",
+          "enum": [
+            "NVIDIA NIM",
+            "Ollama",
+            "OpenRouter",
+            "Gemini"
+          ]
+        },
+        "copilot-rag.embeddingModel": {
+            "type": "string",
+            "default": "nvidia/llama-3.2-nv-embedqa-1b-v2",
+            "description": "The embedding model to use for the RAG backend."
         }
       }
     }
@@ -68,7 +84,8 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
-    "lint": "eslint src --ext ts"
+    "lint": "eslint src --ext ts",
+    "package": "vsce package"
   },
   "devDependencies": {
     "@types/node": "18.x",
@@ -76,10 +93,11 @@
     "@typescript-eslint/eslint-plugin": "^7.11.0",
     "@typescript-eslint/parser": "^7.11.0",
     "eslint": "^8.57.0",
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "vsce": "^2.15.0"
   },
   "dependencies": {
     "axios": "^1.7.2",
-    "form-data": "^4.0.5"
+    "form-data": "^4.0.0"
   }
 }
