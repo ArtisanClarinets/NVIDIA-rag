@@ -8,7 +8,7 @@ export function activate(context: vscode.ExtensionContext) {
     const ingestionManager = new IngestionManager();
     context.subscriptions.push(backendManager, ingestionManager);
 
-    const handler: vscode.ChatParticipant['handler'] = async (request, _context, stream, token) => {
+    const handler: vscode.ChatRequestHandler = async (request, _context, stream, token) => {
         if (backendManager.getStatus() !== BackendStatus.Running) {
             stream.markdown('The RAG backend is not running. Please start it first.');
             return { metadata: { command: '' } };
@@ -35,7 +35,7 @@ export function activate(context: vscode.ExtensionContext) {
                 timeout: 60000, // 60 seconds timeout
                 cancelToken: new axios.CancelToken(source => {
                     token.onCancellationRequested(() => {
-                        source.cancel('Request canceled by user in VS Code.');
+                        source('Request canceled by user in VS Code.');
                     });
                 })
             });
@@ -89,7 +89,7 @@ export function activate(context: vscode.ExtensionContext) {
                 stream.markdown('An unknown error occurred while fetching the response.');
             }
         } finally {
-            stream.progress(undefined);
+            // stream.progress(''); // unnecessary
         }
 
         return { metadata: { command: '' } };
