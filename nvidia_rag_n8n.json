@@ -1,0 +1,398 @@
+{
+  "name": "NVIDIA RAG Blueprint",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "generate",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "webhook"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Extract inputs\nconst body = $input.item.json;\nconst messages = body.messages || [];\nconst use_knowledge_base = body.use_knowledge_base !== false; // Default true\nconst collection_name = body.collection_name || \"default\";\nconst model = body.model || \"meta/llama-3.1-405b-instruct\";\nconst llm_endpoint = body.llm_endpoint || \"https://integrate.api.nvidia.com/v1\";\nconst reranker_endpoint = body.reranker_endpoint || \"https://integrate.api.nvidia.com/v1\";\nconst reranker_model = body.reranker_model || \"nvidia/nv-rerankqa-mistral-4b-v3\";\n\n// Format Chat History (last 10 messages)\nlet history = \"\";\nconst history_msgs = messages.slice(0, -1).slice(-10);\nhistory_msgs.forEach(msg => {\n    history += `${msg.role.toUpperCase()}: ${msg.content}\\n`;\n});\n\n// Last User Input\nconst input = messages.length > 0 ? messages[messages.length - 1].content : \"\";\n\nreturn {\n    json: {\n        messages,\n        use_knowledge_base,\n        collection_name,\n        model,\n        llm_endpoint,\n        reranker_endpoint,\n        reranker_model,\n        history,\n        input\n    }\n};"
+      },
+      "name": "Process Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        200,
+        0
+      ],
+      "id": "process_input"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.use_knowledge_base }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "Use Knowledge Base?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        400,
+        0
+      ],
+      "id": "switch_kb"
+    },
+    {
+      "parameters": {
+        "promptType": "chat",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "/no_think"
+            },
+            {
+              "role": "user",
+              "content": "Conversation history:\\n{{ $('Process Input').item.json.history }}\\n\\nQuery: {{ $('Process Input').item.json.input }}"
+            }
+          ]
+        }
+      },
+      "name": "Chat Chain",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1,
+      "position": [
+        800,
+        -200
+      ],
+      "id": "chat_chain"
+    },
+    {
+      "parameters": {
+        "modelId": "={{ $('Process Input').item.json.model }}",
+        "options": {
+          "baseURL": "={{ $('Process Input').item.json.llm_endpoint }}"
+        }
+      },
+      "name": "NVIDIA NIM Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1,
+      "position": [
+        600,
+        -200
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_CREDENTIAL_ID_HERE",
+          "name": "NVIDIA API Key"
+        }
+      },
+      "id": "chat_model"
+    },
+    {
+      "parameters": {
+        "promptType": "chat",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "/no_think"
+            },
+            {
+              "role": "user",
+              "content": "Given the following chat history and the latest user question, formulate a standalone question which can be understood without the chat history.\\nDo NOT answer the question, just reformulate it if needed and otherwise return it as is.\\nIt should strictly be a query not an answer.\\n\\nChat History:\\n{{ $('Process Input').item.json.history }}\\n\\nLatest Question: {{ $('Process Input').item.json.input }}"
+            }
+          ]
+        }
+      },
+      "name": "Query Rewriter",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1,
+      "position": [
+        600,
+        200
+      ],
+      "id": "rewriter_chain"
+    },
+    {
+      "parameters": {
+        "operation": "retrieve",
+        "collectionName": "={{ $('Process Input').item.json.collection_name }}",
+        "limit": 10,
+        "searchText": "={{ $json.text }}"
+      },
+      "name": "Milvus",
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreMilvus",
+      "typeVersion": 1,
+      "position": [
+        800,
+        200
+      ],
+      "credentials": {
+        "milvusApi": {
+          "id": "YOUR_MILVUS_CREDENTIAL_ID",
+          "name": "Milvus Account"
+        }
+      },
+      "id": "milvus"
+    },
+    {
+      "parameters": {
+        "modelId": "nvidia/nv-embedqa-e5-v5",
+        "options": {
+          "baseURL": "https://integrate.api.nvidia.com/v1"
+        }
+      },
+      "name": "NVIDIA Embedding",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1,
+      "position": [
+        800,
+        400
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_CREDENTIAL_ID_HERE",
+          "name": "NVIDIA API Key"
+        }
+      },
+      "id": "embedding_model"
+    },
+    {
+      "parameters": {
+        "jsCode": "const docs = $input.all();\nconst query = $('Query Rewriter').item.json.text; \n\nconst documents = docs.map(d => ({\n    text: d.json.pageContent,\n    metadata: d.json.metadata\n}));\n\nreturn {\n    json: {\n        model: $('Process Input').item.json.reranker_model,\n        query: query,\n        documents: documents\n    }\n};"
+      },
+      "name": "Format Rerank",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        200
+      ],
+      "id": "format_rerank"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Process Input').item.json.reranker_endpoint }}/rerank",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_API_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "={{ $json.model }}"
+            },
+            {
+              "name": "query",
+              "value": "={{ $json.query }}"
+            },
+            {
+              "name": "documents",
+              "value": "={{ $json.documents }}"
+            }
+          ]
+        }
+      },
+      "name": "Rerank API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        200
+      ],
+      "id": "rerank_api"
+    },
+    {
+      "parameters": {
+        "jsCode": "const rankings = $input.item.json.rankings;\n// Rankings structure: [{index, logit, score}, ...]\nconst documents = $('Format Rerank').item.json.documents;\n\n// Sort by score\nrankings.sort((a, b) => b.score - a.score);\n\n// Top 5\nconst top_k = 5;\nconst top_docs = rankings.slice(0, top_k).map(r => documents[r.index]);\n\n// Format Context String\nlet context = \"\";\ntop_docs.forEach(doc => {\n    context += `Content: ${doc.text}\\n\\n`;\n});\n\nreturn {\n    json: {\n        context,\n        query: $('Format Rerank').item.json.query\n    }\n};"
+      },
+      "name": "Format Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        200
+      ],
+      "id": "format_context"
+    },
+    {
+      "parameters": {
+        "promptType": "chat",
+        "messages": {
+          "values": [
+            {
+              "role": "system",
+              "content": "/no_think"
+            },
+            {
+              "role": "user",
+              "content": "You are a helpful AI assistant named Envie.\\nYou must answer only using the information provided in the context.\\n\\nContext:\\n{{ $json.context }}\\n\\nQuestion: {{ $json.query }}"
+            }
+          ]
+        }
+      },
+      "name": "RAG Chain",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        200
+      ],
+      "id": "rag_chain"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Input": {
+      "main": [
+        [
+          {
+            "node": "Use Knowledge Base?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Use Knowledge Base?": {
+      "main": [
+        [
+          {
+            "node": "Query Rewriter",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Chat Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Rewriter": {
+      "main": [
+        [
+          {
+            "node": "Milvus",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Milvus": {
+      "main": [
+        [
+          {
+            "node": "Format Rerank",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Rerank": {
+      "main": [
+        [
+          {
+            "node": "Rerank API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rerank API": {
+      "main": [
+        [
+          {
+            "node": "Format Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Context": {
+      "main": [
+        [
+          {
+            "node": "RAG Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NVIDIA NIM Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Chat Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Query Rewriter",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "RAG Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "NVIDIA Embedding": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Milvus",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
