@@ -160,7 +160,9 @@ ingestor-server:
 
 If you require GPU index-building, ensure the Milvus image variant supports GPU (for example, keep a `-gpu` tag where applicable). `rag-server` can be deployed with either CPU or GPU images for inference; search will be served on CPU for collections indexed with GPU when `APP_VECTORSTORE_ENABLEGPUSEARCH` is set to `False`.
 
-Note: When `adapt_for_cpu` is in effect, your search requests must supply an `ef` parameter.
+:::{note}
+When `adapt_for_cpu` is in effect, your search requests must supply an `ef` parameter.
+:::
 
 
 ## (Optional) Customize the Milvus Endpoint
@@ -202,7 +204,7 @@ To use a custom Milvus endpoint, use the following procedure.
 3. Redeploy the Helm chart by running the following code.
 
    ```sh
-   helm upgrade rag https://helm.ngc.nvidia.com/nvidia/blueprint/charts/nvidia-blueprint-rag-v2.3.0.tgz -f nvidia-blueprint-rag/values.yaml -n rag
+   helm upgrade rag https://helm.ngc.nvidia.com/nvidia/blueprint/charts/nvidia-blueprint-rag-v2.3.2.tgz -f nvidia-blueprint-rag/values.yaml -n rag
    ```
 
 ## Troubleshooting
@@ -228,8 +230,9 @@ If you encounter GPU_CAGRA errors that cannot be resolved by when switching to C
    docker compose -f deploy/compose/docker-compose-ingestor-server.yaml up -d
    ```
 
-[!NOTE]
+:::{note}
 This will delete all existing vector data, so ensure you have backups if needed.
+:::
 
 
 

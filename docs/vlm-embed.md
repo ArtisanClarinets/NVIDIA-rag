@@ -14,11 +14,13 @@ In this documentation you do the following:
 
 Requirements: An NVIDIA GPU and a valid `NGC_API_KEY`.
 
-> [!Note]
-> **Early Access**: Currently, `nvidia/llama-3.2-nemoretriever-1b-vlm-embed-v1` is in early access preview.
+:::{note}
+**Early Access**: Currently, `nvidia/llama-3.2-nemoretriever-1b-vlm-embed-v1` is in early access preview.
+:::
 
-[!NOTE]
+:::{note}
 **PDF Support Only**: The VLM embedding feature is currently only supported for PDF documents. Other document formats (Word, PowerPoint, etc.) are not supported with VLM embedding.
+:::
 
 ## Limitations
 
@@ -109,8 +111,9 @@ docker compose -f deploy/compose/docker-compose-ingestor-server.yaml up -d
 
 Extractor captures each page as a single image (`APP_NVINGEST_EXTRACTPAGEASIMAGE="True"`); embedder processes page images via `APP_NVINGEST_IMAGE_ELEMENTS_MODALITY="image"`. Other extraction types are disabled to avoid duplicating content.
 
-> [!NOTE]
-> Citations don't work in the `generate` and `search` APIs of the RAG server with this configuration.
+:::{note}
+Citations don't work in the `generate` and `search` APIs of the RAG server with this configuration.
+:::
 
 ```bash
 # Treat each page as a single image (turn off other extractors)
@@ -173,7 +176,7 @@ nv-ingest:
 2. Update the deployment to reflect the changes with the following command.
 
 ```bash
-helm upgrade --install rag -n rag https://helm.ngc.nvidia.com/nvidia/blueprint/charts/nvidia-blueprint-rag-v2.3.0.tgz \
+helm upgrade --install rag -n rag https://helm.ngc.nvidia.com/nvidia/blueprint/charts/nvidia-blueprint-rag-v2.3.2.tgz \
   --username '$oauthtoken' \
   --password "${NGC_API_KEY}" \
   --set imagePullSecret.password=$NGC_API_KEY \

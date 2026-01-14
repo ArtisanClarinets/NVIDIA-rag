@@ -4,33 +4,53 @@
 -->
 # Query Decomposition for NVIDIA RAG Blueprint
 
-You can use query decomposition with the [NVIDIA RAG Blueprint](readme.md). Query decomposition is an advanced RAG (Retrieval-Augmented Generation) technique that breaks down complex, multi-faceted queries into simpler, focused subqueries. Each subquery is processed independently to gather comprehensive context, which is then synthesized into a final comprehensive response.
+By default, query decomposition is disabled in the [NVIDIA RAG Blueprint](readme.md). 
+When you turn on query decomposition you boost accuracy for multi-hop reasoning or context-rich queries. 
+
+Query decomposition is an advanced Retrieval-Augmented Generation (RAG) technique that breaks down complex, multi-faceted queries into simpler, focused subqueries. 
+Each subquery is processed independently to gather comprehensive context, which is then synthesized into a final comprehensive response.
+
+- Key Benefits
+
+  - **Better Context Coverage** – Captures multiple aspects of complex queries.
+  - **Iterative Refinement** – Follows up with additional questions based on initial findings.
+  - **Multi-perspective Analysis** – Approaches queries from different angles.
+
+- Core Components
+
+  - **Subquery Generation** – LLM-powered breakdown of complex queries.
+  - **Iterative Processing** – Multi-round refinement with follow-up questions.
+  - **Response Synthesis** – Combines insights from all subqueries.
 
 
-## Key Benefits
-- **Better Context Coverage** – Captures multiple aspects of complex queries.
-- **Iterative Refinement** – Follows up with additional questions based on initial findings.
-- **Multi-perspective Analysis** – Approaches queries from different angles.
 
-## Core Components
-- **Subquery Generation** – LLM-powered breakdown of complex queries.
-- **Iterative Processing** – Multi-round refinement with follow-up questions.
-- **Response Synthesis** – Combines insights from all subqueries.
+## Accuracy Improvement Example
+
+The following example that uses the [HotpotQA](https://hotpotqa.github.io/) dataset demonstrates the accuracy improvement from enabling query decomposition.
+
+```text
+Query: I am thinking of a Ancient Roman City. The city was destroyed by volcanic eruption. The eruption occurred in the year 79 AD. The volcano was a stratovolcano. Where was the session held where it was decided that the city would be named a UNESCO world heritage site?
+
+Reference Answer: Naples
+
+The response with no query decomposition is:
+
+    "The session where it was decided that the city would be named a UNESCO World Heritage Site was held in 1997. However, the specific location of this session is not mentioned in the provided context."
+
+The response with query decomposition is:
+
+    "Naples"
+```
 
 
-## Deployment Options
-You can enable query decomposition in both Docker and Helm deployments:
 
-1. **Docker Deployment** – Use Docker to deploy RAG on your hardware
-2. **Helm Deployment** – Deploys as a Helm chart on a Kubernetes cluster (local deployment only)
+## Docker Deployment
 
-## Option 1: Docker Deployment (Default)
-
-### Step 1: Deploy all the dependent services
+### Deploy all the dependent services
 
 Follow the deployment guide for [Self-Hosted Models](deploy-docker-self-hosted.md) or [NVIDIA-Hosted Models](deploy-docker-nvidia-hosted.md).
 
-### Step 2: Enable query decomposition
+### Enable query decomposition
 
 Set the environment variable to enable query decomposition:
 
@@ -45,16 +65,16 @@ After setting these environment variables, you must restart the RAG server for `
 docker compose -f deploy/compose/docker-compose-rag-server.yaml up -d
 ```
 
-## Option 2: Helm Deployment (Local Deployment Only)
+## Helm Deployment
 
-Alternatively, you can deploy RAG with query decomposition using Helm for Kubernetes environments. For details, see [Deploy with Helm](deploy-helm.md).
+You can deploy RAG with query decomposition using Helm for Kubernetes environments. For details, see [Deploy with Helm](deploy-helm.md).
 
 ### Update RAG Blueprint Deployment with Query Decomposition
 
 Use the Helm upgrade command below to enable query decomposition in RAG Blueprint by setting `ENABLE_QUERY_DECOMPOSITION` and `MAX_RECURSION_DEPTH`:
 
 ```bash
-helm upgrade rag -n rag https://helm.ngc.nvidia.com/nvidia/blueprint/charts/nvidia-blueprint-rag-v2.3.0.tgz \
+helm upgrade rag -n rag https://helm.ngc.nvidia.com/nvidia/blueprint/charts/nvidia-blueprint-rag-v2.3.2.tgz \
   --username '$oauthtoken' \
   --password "${NGC_API_KEY}" \
   --set imagePullSecret.password=${NGC_API_KEY} \
@@ -111,9 +131,10 @@ This query requires multiple interconnected steps:
 ## How Query Decomposition Works
 To visualize how query decomposition works, see the diagram below:
 
-![Query Decomposition Flow](assets/query_decomposition.jpeg)
+```{figure} assets/query_decomposition.jpeg
 
-**Figure:** *Query Decomposition Flow — The system breaks down a complex query into subqueries, processes each iteratively, and synthesizes a comprehensive answer.*
+Query Decomposition Flow — The system breaks down a complex query into subqueries, processes each iteratively, and synthesizes a comprehensive answer.
+```
 
 
 ### Core Algorithm
@@ -131,5 +152,15 @@ To visualize how query decomposition works, see the diagram below:
 
 
 
-> [!IMPORTANT]
-> Query decomposition is not available for direct LLM calls (when `use_kb=false`). This feature requires the knowledge base integration to process subqueries and retrieve relevant documents. For direct LLM interactions, queries are processed without decomposition.
+:::{important}
+Query decomposition is not available for direct LLM calls (when `use_kb=false`). This feature requires the knowledge base integration to process subqueries and retrieve relevant documents. For direct LLM interactions, queries are processed without decomposition.
+:::
+
+
+
+## Related Topics
+
+- [Best Practices for Common Settings](accuracy_perf.md).
+- [Deploy with Docker (Self-Hosted Models)](deploy-docker-self-hosted.md)
+- [Deploy with Docker (NVIDIA-Hosted Models)](deploy-docker-nvidia-hosted.md)
+- [Deploy with Helm](deploy-helm.md)

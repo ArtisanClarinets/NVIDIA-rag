@@ -4,19 +4,39 @@
 -->
 # Vision-Language Model (VLM) for Generation for NVIDIA RAG Blueprint
 
-The Vision-Language Model (VLM) inference feature in the [NVIDIA RAG Blueprint](readme.md) enhances the system's ability to understand and reason about visual content that is **automatically retrieved from the knowledge base**. Unlike traditional image upload systems, this feature operates on **image citations** that are internally discovered during the retrieval process.
+The Vision-Language Model (VLM) inference feature in the [NVIDIA RAG Blueprint](readme.md) enhances the system's ability to understand and reason about visual content. 
+Unlike traditional image upload systems, this feature operates on image citations that are internally discovered during the retrieval process. 
+
+:::{warning}
+B200 GPUs are not supported for VLM based inferencing in RAG.
+For this feature, use H100 or A100 GPUs instead.
+:::
+
+- Key Use Cases for VLM
+
+  - **Documents with charts and graphs**: Financial reports, scientific papers, business analytics.
+  - **Technical diagrams**: Engineering schematics, architectural plans, flowcharts
+  - **Visual data representations**: Infographics, tables with visual elements, dashboards
+  - **Mixed content documents**: PDFs containing both text and images
+  - **Image-heavy content**: Catalogs, product documentation, visual guides
+
+- Key Benefits of VLM
+
+  - **Seamless Multimodal Experience** – Users don't need to manually upload images; visual content is automatically discovered and analyzed from images embedded in documents.
+  - **Improved Accuracy** – Enhanced response quality for documents containing images, charts, diagrams, and visual data.
+  - **Quality Assurance** – Internal reasoning ensures only relevant visual insights are used.
+  - **Contextual Understanding** – Visual analysis is performed in the context of the user's specific question.
+  - **Fallback Handling** – System gracefully handles cases where images are insufficient or irrelevant.
+
+:::{warning}
+Enabling VLM inference increases response latency from additional image processing and VLM model inference time. Consider this trade-off between accuracy and speed based on your requirements.
+:::
 
 
-> [!WARNING]
->
-> B200 GPUs are not supported for VLM based inferencing in RAG.
-> For this feature, use H100 or A100 GPUs instead.
 
+## How VLM Works in the RAG Pipeline
 
-
-## **How VLM Works in the RAG Pipeline**
-
-The VLM feature follows this sophisticated flow:
+The VLM feature follows this flow:
 
 1. **Automatic Image Discovery**: When a user query is processed, the RAG system retrieves relevant documents from the vector database. If any of these documents contain images (charts, diagrams, photos, etc.), they are automatically identified.
 
@@ -28,32 +48,9 @@ The VLM feature follows this sophisticated flow:
 
 5. **Unified Response**: The user receives a single, coherent response that seamlessly incorporates both textual and visual understanding.
 
-## **Key Benefits**
 
-- **Seamless Multimodal Experience**: Users don't need to manually upload images; visual content is automatically discovered and analyzed from images embedded in documents
-- **Improved Accuracy**: Enhanced response quality for documents containing images, charts, diagrams, and visual data
-- **Quality Assurance**: Internal reasoning ensures only relevant visual insights are used
-- **Contextual Understanding**: Visual analysis is performed in the context of the user's specific question
-- **Fallback Handling**: System gracefully handles cases where images are insufficient or irrelevant
 
----
-
-## When to Use VLM
-
-The VLM feature is particularly beneficial when your knowledge base contains:
-
-- **Documents with charts and graphs**: Financial reports, scientific papers, business analytics
-- **Technical diagrams**: Engineering schematics, architectural plans, flowcharts
-- **Visual data representations**: Infographics, tables with visual elements, dashboards
-- **Mixed content documents**: PDFs containing both text and images
-- **Image-heavy content**: Catalogs, product documentation, visual guides
-
-> [!Note]
-> **Latency Impact**: Enabling VLM inference will increase response latency due to additional image processing and VLM model inference time. Consider this trade-off between accuracy and speed based on your use case requirements.
-
----
-
-## **Prompt customization**
+## Prompt customization
 
 The VLM feature uses predefined prompts that can be customized to suit your specific needs:
 
@@ -78,7 +75,7 @@ The VLM feature employs a sophisticated two-step process where these prompts are
 This two-step process ensures that visual insights are only used when they genuinely enhance the response quality and relevance.
 
 
-### **What Users Experience**
+### What Users Experience
 
 Users interact with the system normally - they ask questions and receive responses. The VLM processing happens transparently in the background:
 
@@ -88,7 +85,32 @@ Users interact with the system normally - they ask questions and receive respons
 4. **System generates unified response** that incorporates visual insights when beneficial
 5. **User receives a single, coherent answer** that seamlessly blends textual and visual understanding
 
----
+
+
+## Accuracy Improvement Example
+
+The following example that uses the Ragbattle dataset demonstrates the accuracy improvement from enabling VLM.
+
+Using the [Deloitte's Tax transformation trends survey from May 2021](https://www.deloitte.com/content/dam/assets-shared/en_gb/legacy/docs/research/2022/Deloitte-tax-operations-transformation-trends-survey-2021.pdf) 
+and the following question:
+
+```text
+What is the percentage of companies with NextGen ERP systems/Advanced that said the tax team was highly effective in advising the business on emerging compliance issues?
+```
+
+Before enabling VLM, the system answers 38% with an accuracy score of 0.0. 
+After enabling VLM, the system answers 64% with an accuracy score of 1.0. 
+The answer is found on page 21 of the PDF (page 20 of the document).
+
+The following table shows some approximate accuracy improvements from enabling VLM.
+
+| Query                                                                                    | Correct Answer      | Answer Without VLM (Score) | Answer With VLM (Score)   | Reason for Improvement |
+|------------------------------------------------------------------------------------------|---------------------|----------------------------|---------------------------|------------------------|
+| Percentage for "…NextGen ERP system/Advanced" on "Effectiveness of the tax team…" graph. | "64%"               | "38%" (0.0)                | "64%" (1.0)               | Precise reading of a charted percentage. |
+| Are Business development companies more or less flexible than Mezzanine funds?           | "less flexible"     | "more flexible" (0.0)      | "less flexible" (1.0)     | Correct comparative interpretation from a structured source. |
+| Estimated cost of capital range for business development companies.                      | "SOFR+600 to 1,000" | "12-16%" (0.25)            | "SOFR+600 to 1,000" (1.0) | Extracted the correct range from a structured chart. |
+
+
 
 ## Start the VLM NIM Service (Local)
 
@@ -124,10 +146,11 @@ deploy:
           capabilities: [gpu]
 ```
 
-> [!Note]
-> Ensure the specified GPU is available and has sufficient memory for the VLM model.
+:::{note}
+Ensure the specified GPU is available and has sufficient memory for the VLM model.
+:::
 
----
+
 
 ### Enable VLM Inference in RAG Server
 
@@ -146,9 +169,10 @@ docker compose -f deploy/compose/docker-compose-rag-server.yaml up -d
 - `APP_VLM_MODELNAME`: The name of the VLM model to use (default: Llama Cosmos Nemotron 8b)
 - `APP_VLM_SERVERURL`: The URL of the VLM NIM server (local or remote)
 
----
 
 Continue following the rest of the steps in [Deploy with Docker (Self-Hosted Models)](deploy-docker-self-hosted.md) to deploy the ingestion-server and rag-server containers.
+
+
 
 ## Using a Remote NVIDIA-Hosted NIM Endpoint (Optional)
 
@@ -168,15 +192,17 @@ docker compose -f deploy/compose/docker-compose-rag-server.yaml up -d
 Continue following the rest of the steps in [Deploy with Docker (NVIDIA-Hosted Models)](deploy-docker-nvidia-hosted.md) to deploy the ingestion-server and rag-server containers.
 
 
+
 ## Using Helm Chart Deployment
 
-> [!Note]
-> On prem deployment of the VLM model requires an additional 1xH100 or 1xB200 GPU in default deployment configuration.
-> If MIG slicing is enabled on the cluster, ensure to assign a dedicated slice to the VLM. Check [mig-deployment.md](./mig-deployment.md) and  [values-mig.yaml](../deploy/helm/mig-slicing/values-mig.yaml) for more information.
+:::{note}
+On prem deployment of the VLM model requires an additional 1xH100 or 1xB200 GPU in default deployment configuration.
+If MIG slicing is enabled on the cluster, ensure to assign a dedicated slice to the VLM. Check [mig-deployment.md](./mig-deployment.md) and  [values-mig.yaml](../deploy/helm/mig-slicing/values-mig.yaml) for more information. 
+:::
 
 To enable VLM inference in Helm-based deployments, follow these steps:
 
-1. **Set VLM environment variables in `values.yaml`**
+1. Set VLM environment variables in `values.yaml`
 
    In your [values.yaml](../deploy/helm/nvidia-blueprint-rag/values.yaml) file, under the `envVars` section, set the following environment variables:
 
@@ -192,12 +218,12 @@ To enable VLM inference in Helm-based deployments, follow these steps:
     enabled: true
   ```
 
-2. **Apply the updated Helm chart**
+2. Apply the updated Helm chart
 
    Run the following command to upgrade or install your deployment:
 
    ```
-   helm upgrade --install rag -n <namespace> https://helm.ngc.nvidia.com/nvidia/blueprint/charts/nvidia-blueprint-rag-v2.3.0.tgz \
+   helm upgrade --install rag -n <namespace> https://helm.ngc.nvidia.com/nvidia/blueprint/charts/nvidia-blueprint-rag-v2.3.2.tgz \
      --username '$oauthtoken' \
      --password "${NGC_API_KEY}" \
      --set imagePullSecret.password=$NGC_API_KEY \
@@ -205,7 +231,7 @@ To enable VLM inference in Helm-based deployments, follow these steps:
      -f deploy/helm/nvidia-blueprint-rag/values.yaml
    ```
 
-3. **Check if the VLM pod has come up**
+3. Check if the VLM pod has come up
 
   A pod with the name `rag-0` will start, this pod corresponds to the VLM model deployment.
 
@@ -214,12 +240,12 @@ To enable VLM inference in Helm-based deployments, follow these steps:
     ```
 
 
-> [!Note]
-> For local VLM inference, ensure the VLM NIM service is running and accessible at the configured `APP_VLM_SERVERURL`. For remote endpoints, the `NGC_API_KEY` is required for authentication.
+:::{note}
+For local VLM inference, ensure the VLM NIM service is running and accessible at the configured `APP_VLM_SERVERURL`. For remote endpoints, the `NGC_API_KEY` is required for authentication.
+:::
 
 
-
-### **When VLM Processing Occurs**
+### When VLM Processing Occurs
 
 VLM processing is triggered when:
 - `ENABLE_VLM_INFERENCE` is set to `true`
@@ -236,6 +262,7 @@ VLM processing is triggered when:
 - Check rag-server logs for errors related to VLM inference or API authentication.
 - Verify that images are properly ingested and indexed in your knowledge base.
 - Monitor VLM response reasoning logs to understand when visual insights are being used or skipped.
+
 
 ### VLM response reasoning (optional)
 
@@ -355,7 +382,7 @@ ENABLE_REFLECTION: "False"
 4) Apply or upgrade the release:
 
 ```bash
-helm upgrade --install rag -n <namespace> https://helm.ngc.nvidia.com/nvidia/blueprint/charts/nvidia-blueprint-rag-v2.3.0.tgz \
+helm upgrade --install rag -n <namespace> https://helm.ngc.nvidia.com/nvidia/blueprint/charts/nvidia-blueprint-rag-v2.3.2.tgz \
   --username '$oauthtoken' \
   --password "${NGC_API_KEY}" \
   --set imagePullSecret.password=$NGC_API_KEY \
@@ -363,15 +390,24 @@ helm upgrade --install rag -n <namespace> https://helm.ngc.nvidia.com/nvidia/blu
   -f deploy/helm/nvidia-blueprint-rag/values.yaml
 ```
 
-> [!Note]
-> In this mode, the RAG server will use the VLM output as the final response. Keep the embedding and reranker services enabled as in the default chart configuration. If you use a local VLM, also set `APP_VLM_SERVERURL` (for example, `http://nim-vlm:8000/v1`) and enable the `nim-vlm` subchart as shown above.
-
+:::{note}
+In this mode, the RAG server will use the VLM output as the final response. Keep the embedding and reranker services enabled as in the default chart configuration. If you use a local VLM, also set `APP_VLM_SERVERURL` (for example, `http://nim-vlm:8000/v1`) and enable the `nim-vlm` subchart as shown above.
+:::
 
 ### Conversation history and context limitations
 
-> [!Warning]
-> Conversation history is not passed to the VLM. The VLM receives only the current prompt and the cited image(s), and its effective context window is limited. When `APP_VLM_RESPONSE_AS_FINAL_ANSWER` is set to `true` and the user query depends on prior turns or broader textual context, the VLM will not decontextualize the query and may produce incomplete or off-target answers.
+:::{warning}
+Conversation history is not passed to the VLM. The VLM receives only the current prompt and the cited image(s), and its effective context window is limited. When `APP_VLM_RESPONSE_AS_FINAL_ANSWER` is set to `true` and the user query depends on prior turns or broader textual context, the VLM will not decontextualize the query and may produce incomplete or off-target answers.
+:::
 
 Mitigations:
 - Rephrase or rewrite the user query to be self-contained before sending to the VLM (e.g., enable query rewriting upstream).
 - Keep `APP_VLM_RESPONSE_AS_FINAL_ANSWER` set to `false` so the LLM composes the final answer, optionally incorporating the VLM output as additional context.
+
+
+
+## Related Topics
+
+- [Release Notes](release-notes.md)
+- [Debugging](debugging.md)
+- [Troubleshoot NVIDIA RAG Blueprint](troubleshooting.md)
